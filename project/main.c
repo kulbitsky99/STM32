@@ -106,17 +106,6 @@ __attribute__((naked)) static void delay(void)
 #endif
 }
 
-__attribute__((naked)) static void delay_10ms(void)
-{
-    asm ("push {r7, lr}");
-    asm ("ldr r6, [pc, #8]");
-    asm ("sub r6, #1");
-    asm ("cmp r6, #0");
-    asm ("bne delay_10ms+0x4");
-    asm ("pop {r7, pc}");
-    asm (".word 0xea60"); //60000
-}
-
 
 void digit_to_screen(int digit, int counter)
 {
@@ -282,36 +271,56 @@ void number_to_screen(int number)
 	}
 }
 
+__attribute__((naked)) static void delay_5ms(int number)
+{
+    asm ("push {r7, lr}");
+    asm ("ldr r6, [pc, #8]");
+    asm ("sub r6, #1");
+    number_to_screen(number);
+    asm ("cmp r6, #0");
+    asm ("bne delay_5ms+0x4");
+    asm ("pop {r7, pc}");
+    asm (".word 0x8000"); //32768
+}
 
-/*
- * Here we call configure all peripherals we need and
- * start blinking upon current mode
- */
 int main(void)
 {
     rcc_config();
     gpio_config();
 
     int debouncer_clk = 0;
-    int number = 5362;
+    int number = 9517;
     int user_button_state = 0;
     while (1)
     {
-	while(LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_0))
-	{
-		number_to_screen(number);
-	}
-        user_button_state = 0;	
-	LL_GPIO_SetOutputPin(GPIOA, LL_GPIO_PIN_0);    
+#if defined(TURN_ON_CONTACT_DEBOUNCER)	    
 	number_to_screen(number);
-	if(LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_0) && user_button_state == 0)
+	if(LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_0))
 	{
-
-		number++;
 		user_button_state = 1;
-		number_to_screen(number);
+		debouncer_clk = 0;
+	}		
+
+	if(user_button_state)
+	{
+		debouncer_clk++;
+		delay_5ms(number);
 	}
-    
+	if(debouncer_clk >= 5) // experimental value 5
+	{
+		number++;
+		number_to_screen(number);
+		user_button_state = 0;
+		debouncer_clk = 0;
+	}
+#else
+	number_to_screen(number);
+	if(LL_GPIO_IsInputPinSet(GPIOA, LL_GPIO_PIN_0))
+        {
+		number++;
+                number_to_screen(number);
+	}
+#endif
     }
     return 0;
 }
